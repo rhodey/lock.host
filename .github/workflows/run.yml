@@ -1,0 +1,33 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check cert
+        run: |
+          mkdir -p download && cd download/
+          curl https://aws-nitro-enclaves.amazonaws.com/AWS_NitroEnclaves_Root-G1.zip > root.zip
+          unzip root.zip
+          sha256sum root.pem > hash.txt
+          sha256sum ../root.pem >> hash.txt
+          sha256sum --check hash.txt || exit 1
+
+      - name: Runtime
+        run: |
+          sudo apt install -y just
+          just serve-alpine &
+          just build-runtime
+
+      - name: Host
+        run: just build-host

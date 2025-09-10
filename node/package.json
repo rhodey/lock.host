@@ -1,0 +1,23 @@
+{
+  "name": "lock.host runtime",
+  "version": "0.1.0",
+  "description": "lock.host runtime",
+  "homepage": "https://lock.host",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/rhodey/lock.host.git"
+  },
+  "dependencies": {
+    "ffi-napi": "^4.0.3",
+    "ref-napi": "^3.0.3",
+    "ref-array-di": "^1.2.2",
+    "ref-struct-di": "^1.1.1",
+    "dns2": "^2.1.0",
+    "libsodium-wrappers": "^0.7.15",
+    "mkcert": "^3.2.0",
+    "cookie": "^1.0.2",
+    "split": "^1.0.1"
+  },
+  "devDependencies": { }
+}

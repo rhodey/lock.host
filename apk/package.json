@@ -1,0 +1,9 @@
+{
+  "name": "lockhost-proxy-alpine",
+  "version": "0.0.1",
+  "description": "save alpine apks to disk",
+  "dependencies": {
+    "minimist": "^1.2.0"
+  },
+  "keywords": []
+}

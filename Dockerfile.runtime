@@ -1,0 +1,69 @@
+# alpine 3.18.9
+FROM alpine@sha256:2995c82e8e723d9a5c8585cb8e901d1c50e3c2759031027d3bff577449435157
+
+COPY apk/repositories.serve /etc/apk/repositories
+
+# net
+RUN apk add --no-cache iptables=1.8.9-r2
+
+# install node
+RUN apk add --no-cache \
+  git=2.40.4-r0 \
+  curl=8.12.1-r0 \
+  bash=5.2.15-r5 \
+  build-base=0.5-r3 \
+  python3=3.11.12-r1
+
+# install node
+WORKDIR /root
+ENV NVM_DIR=/root/.nvm
+RUN git clone --depth 1 --branch v0.40.1 https://github.com/nvm-sh/nvm nvm
+ENV NVM_NODEJS_ORG_MIRROR="https://unofficial-builds.nodejs.org/download/release"
+RUN cd nvm && . ./nvm.sh && nvm install 20.11.1
+ENV PATH="/root/.nvm/versions/node/v20.11.1/bin:$PATH"
+RUN ln -s /root/.nvm/versions/node/v20.11.1/bin/node /bin/node
+RUN rm -rf /root/nvm
+
+# deterministic libexpat
+RUN apk add --no-cache libexpat=2.7.0-r0
+RUN cp /usr/lib/libexpat.so.1.10.1 /root/libexpat.so.1.10.1
+
+# js packages
+WORKDIR /runtime
+COPY node/package.json .
+COPY node/package-lock.json .
+RUN npm install
+
+# deterministic libexpat
+RUN rm /usr/lib/libexpat*
+RUN mv /root/libexpat.so.1.10.1 /usr/lib/libexpat.so.1.10.1
+RUN ln -s /usr/lib/libexpat.so.1.10.1 /usr/lib/libexpat.so.1
+
+# deterministic ffi
+RUN rm node_modules/ffi-napi/build/Makefile
+RUN rm -r node_modules/ffi-napi/build/deps
+
+# js sources
+COPY node node
+RUN mv node/* .
+
+# rm trash
+RUN rm -rf /root/.cache
+RUN rm -rf /root/nvm/.git
+RUN rm -rf /root/.nvm/.cache
+RUN rm -f /root/.nvm/alias/lts/*
+RUN rm -rf /root/.npm
+RUN rm -f /lib/apk/db/scripts.tar
+RUN rm -rf /var/cache
+
+# rust bins
+COPY root.pem .
+COPY dist/vsock /bin/vsock
+COPY dist/attest /bin/attest
+COPY dist/attest-parse /bin/attest-parse
+RUN chmod +x /bin/vsock
+RUN chmod +x /bin/attest
+RUN chmod +x /bin/attest-parse
+
+# nitro needs this
+RUN chmod ug+w,o-rw /bin/vsock /bin/attest /bin/attest-parse root.pem

@@ -1,0 +1,27 @@
+# alpine 3.18.9
+FROM alpine@sha256:2995c82e8e723d9a5c8585cb8e901d1c50e3c2759031027d3bff577449435157
+
+COPY apk/repositories.serve /etc/apk/repositories
+
+# install rust
+RUN apk add --no-cache curl=8.12.1-r0 build-base=0.5-r3 perl=5.36.2-r1
+RUN curl --proto '=https' --tlsv1.3 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN rustup install 1.82.0 && rustup default 1.82.0
+RUN rustup target add x86_64-unknown-linux-musl
+
+# fetch cargo crates
+RUN mkdir -p /workspace/rust/src
+WORKDIR /workspace/rust
+COPY rust/Cargo.toml .
+COPY rust/Cargo.lock .
+COPY rust/rust-toolchain.toml .
+RUN touch src/main.rs
+RUN cargo fetch --locked --target=x86_64-unknown-linux-musl
+RUN rm -r src/
+
+# build src
+COPY rust/src/ src/
+RUN cargo build --locked --target=x86_64-unknown-linux-musl --bin vsock --release
+RUN cargo build --locked --target=x86_64-unknown-linux-musl --bin attest --release
+RUN cargo build --locked --target=x86_64-unknown-linux-musl --bin attest-parse --features ssl --release
