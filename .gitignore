@@ -1,0 +1,8 @@
+dist/
+target/
+apk/node_modules
+node/node_modules
+.env*
+*\.swp
+*\.tar
+.DS_Store

@@ -1,0 +1,14 @@
+.env*
+*\.swp
+.DS_Store
+
+rust/*\.swp
+rust/*.DS_Store
+rust/src/*\.swp
+rust/src/*.DS_Store
+rust/src/bin/*\.swp
+rust/src/bin/*.DS_Store
+
+node/node_modules
+node/*\.swp
+node/*.DS_Store
