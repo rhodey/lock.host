@@ -1,5 +1,5 @@
 # Lock.host
-Lock.host is software for shipping enclave apps where the trust anchor extends into the browser, see:
+Lock.host extends TEE trust anchors into the browser, see:
 + [lock.host-node](https://github.com/rhodey/lock.host-node)
 + [lock.host-python](https://github.com/rhodey/lock.host-python)
 + [IPFS-boot](https://github.com/rhodey/IPFS-boot)
