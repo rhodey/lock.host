@@ -1,8 +1,9 @@
 # Lock.host
-Lock.host extends TEE trust anchors into the browser, see:
+Lock.host is the best TEE codebase online, see:
 + [lock.host-node](https://github.com/rhodey/lock.host-node)
 + [lock.host-python](https://github.com/rhodey/lock.host-python)
 + [IPFS-boot](https://github.com/rhodey/IPFS-boot)
++ [lock.host-ssh](https://github.com/rhodey/lock.host-ssh)
 
 ## Setup
 Install docker using common docs then install just:
