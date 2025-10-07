@@ -1,5 +1,7 @@
 # Lock.host
-Lock.host is the best TEE codebase online, see:
+Lock.host is the best TEE codebase online
+
+AWS Nitro, Docker, any language, and net, see:
 + [lock.host-node](https://github.com/rhodey/lock.host-node)
 + [lock.host-python](https://github.com/rhodey/lock.host-python)
 + [IPFS-boot](https://github.com/rhodey/IPFS-boot)
