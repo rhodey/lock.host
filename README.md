@@ -7,6 +7,19 @@ AWS Nitro, Docker, any language, and net, see:
 + [IPFS-boot](https://github.com/rhodey/IPFS-boot)
 + [lock.host-ssh](https://github.com/rhodey/lock.host-ssh)
 
+## Summary
+AWS Nitro Enclaves are the AWS TEE product
+
+AWS has a $100 Billion dollar business selling isolated compute to customers
+
+Every Nitro TEE lives with AWS so there is only 1 party to trust and since 2020 release Nitro has 0 exploits
+
+Nitro TEE (like other TEEs) supports attestation
+
+Users HTTP2 connect to Nitro and the Lock.host stack sends an attest doc with key for an ephemeral session
+
+Developers code normal TCP or HTTP servers and inherit from a base docker image and everything just works
+
 ## Setup
 Install docker using common docs then install just:
 ```
