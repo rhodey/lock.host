@@ -1,8 +1,7 @@
 #!/bin/sh
 set -e
 
-# for testing
+# for tests
 chown -f root /tmp/write || true
 
-# start
 node host.js "$@"

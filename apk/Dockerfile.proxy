@@ -1,4 +1,4 @@
-FROM node:21-alpine
+FROM lockhost-host
 
 WORKDIR /root
 
@@ -7,4 +7,4 @@ COPY apk/package-lock.json .
 RUN npm install
 COPY apk/proxy.js .
 
-CMD ["node", "proxy.js", "8080", "https://dl-cdn.alpinelinux.org"]
+ENTRYPOINT ["node", "proxy.js", "8080", "https://dl-cdn.alpinelinux.org"]

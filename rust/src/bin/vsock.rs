@@ -1,7 +1,6 @@
 use tokio;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_vsock::{VsockListener, VsockAddr, VsockStream};
-use std::io::{self, BufRead, BufReader};
 
 const PORT: u32 = 4444;
 const CID_ANY: u32 = 0xFFFFFFFF;
@@ -29,26 +28,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         vsock = VsockStream::connect(addr).await?;
     }
 
-    let (vsock_read, vsock_write) = vsock.into_split();
+    let (mut vsock_read, mut vsock_write) = vsock.into_split();
 
     tokio::spawn(async move {
-        let stdin = io::stdin();
-        let mut stdin_read = BufReader::new(stdin);
-        let mut vsock_write = vsock_write;
+        let mut stdin = tokio::io::stdin();
+        let mut buf = [0u8; READ_BUF_LEN];
 
         loop {
-            let mut line = String::new();
-            match stdin_read.read_line(&mut line) {
+            match stdin.read(&mut buf).await {
                 Ok(0) => {
-                    eprintln!("EOF");
+                    eprintln!("stdin EOF");
                     break;
                 },
-                Ok(_) => {
-                    let tx_buf = format!("{}\n", line);
-                    vsock_write.write_all(tx_buf.as_bytes()).await.unwrap();
+                Ok(n) => {
+                    if let Err(e) = vsock_write.write_all(&buf[..n]).await {
+                        eprintln!("vsock write_all err: {}", e);
+                        break;
+                    }
                 }
                 Err(e) => {
-                    eprintln!("stdin read_line err: {}", e);
+                    eprintln!("stdin read err: {}", e);
                     break;
                 }
             }
@@ -56,12 +55,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     tokio::spawn(async move {
-        let mut vsock_read = vsock_read;
+        let mut stdout = tokio::io::stdout();
+        let mut buf = [0u8; READ_BUF_LEN];
+
         loop {
-          let mut rx_buf = [0u8; READ_BUF_LEN];
-          let rx_len = vsock_read.read(&mut rx_buf).await.unwrap();
-          let rx_str = std::str::from_utf8(&rx_buf[..rx_len]).unwrap();
-          print!("{}", rx_str);
+            match vsock_read.read(&mut buf).await {
+                Ok(0) => {
+                    eprintln!("vsock EOF");
+                    break;
+                },
+                Ok(n) => {
+                    if let Err(e) = stdout.write_all(&buf[..n]).await {
+                        eprintln!("stdout write_all err: {}", e);
+                        break;
+                    }
+                    let _ = stdout.flush().await;
+                }
+                Err(e) => {
+                    eprintln!("vsock read err: {}", e);
+                    break;
+                }
+            }
         }
     });
 

@@ -1,8 +1,9 @@
 {
   "name": "lock.host runtime",
-  "version": "0.1.0",
+  "author": "Rhodey Orbits",
   "description": "lock.host runtime",
   "homepage": "https://lock.host",
+  "version": "0.9.1",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -14,8 +15,12 @@
     "ref-array-di": "^1.2.2",
     "ref-struct-di": "^1.1.1",
     "dns2": "^2.1.0",
-    "libsodium-wrappers": "^0.7.15",
+    "libsodium-wrappers": "^0.8.2",
+    "better-sqlite3": "^12.6.2",
+    "msgpackr": "^1.11.2",
     "mkcert": "^3.2.0",
+    "minimist": "^1.2.8",
+    "undici": "^7.15.0",
     "cookie": "^1.0.2",
     "split": "^1.0.1"
   },

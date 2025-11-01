@@ -1,18 +1,17 @@
 const { Transform } = require('stream')
+const sodium = require('libsodium-wrappers')
 
 // https://doc.libsodium.org/secret-key_cryptography/secretstream
 class EncryptStream extends Transform {
-  constructor(sodium, key) {
+  constructor(key) {
     super()
-    this.sodium = sodium
-    const res = this.sodium.crypto_secretstream_xchacha20poly1305_init_push(key)
+    const res = sodium.crypto_secretstream_xchacha20poly1305_init_push(key)
     this.state = res.state
     this.push(Buffer.from(res.header))
     this.out = []
   }
 
   _transform(chunk, encoding, callback) {
-    const { sodium } = this
     const bytes = sodium.crypto_secretstream_xchacha20poly1305_push(this.state,
       chunk, null, sodium.crypto_secretstream_xchacha20poly1305_TAG_MESSAGE,
     )
@@ -26,9 +25,8 @@ class EncryptStream extends Transform {
 
 // https://doc.libsodium.org/secret-key_cryptography/secretstream
 class DecryptStream extends Transform {
-  constructor(sodium, key) {
+  constructor(key) {
     super()
-    this.sodium = sodium
     this.key = key
     this.state = null
     this.headBuf = Buffer.alloc(0)
@@ -56,7 +54,6 @@ class DecryptStream extends Transform {
   }
 
   _transform(chunk, encoding, callback) {
-    const { sodium } = this
     if (this.state === null) {
       this.headBuf = Buffer.concat([this.headBuf, chunk])
       if (this.headBuf.byteLength < sodium.crypto_secretstream_xchacha20poly1305_HEADERBYTES) {

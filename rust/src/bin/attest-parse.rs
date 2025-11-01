@@ -24,12 +24,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if test_doc.starts_with("testdoc,") == true {
       let mut parts: Vec<&str> = test_doc.split(',').collect();
       parts.remove(0);
-      parts.truncate(3);
-      // public_key, nonce, user_data
+      parts.truncate(4);
+      // public_key, nonce, user_data, PCR0
       let parts = parts.join(",");
-      // test doc must always have pcrs = zeros
-      let pcr = "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
-      println!("{},{},{},{}", parts, pcr, pcr, pcr);
+      // only allowed to have 1 of 3 PCR
+      let zeros = "0000000000000000000000000000000000000000000000000000000000000000";
+      // (public_key, nonce, user_data, PCR0), PCR1, PCR2
+      println!("{},{},{}", parts, zeros, zeros);
       return Ok(())
     }
 

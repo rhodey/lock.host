@@ -1,10 +1,10 @@
 const fs = require('fs')
 const net = require('net')
-const split = require('split')
 const spawn = require('child_process').spawn
+const { PackrStream, UnpackrStream } = require('msgpackr')
 
 // connect to /dev/vsock via /bin/vsock
-// or if running as test then simulate using fifos
+// or simulate using fifos
 
 function openFifoRead() {
   const path = '/tmp/read'
@@ -13,7 +13,8 @@ function openFifoRead() {
     fs.open(path, flags, (err, fd) => {
       if (err) { return rej(err) }
       const sock = new net.Socket({ fd })
-      res(sock.pipe(split()))
+      const unpack = new UnpackrStream()
+      res(sock.pipe(unpack))
     })
   })
 }
@@ -32,6 +33,9 @@ async function openFifos(onError) {
   write.once('error', (err) => onError(new Error(`fifo write error ${err.message}`)))
   write.once('close', () => onError(new Error(`fifo write closed`)))
 
+  const pack = new PackrStream()
+  pack.pipe(write)
+
   return {
     on: function (event, cb) {
       read.on(event, cb)
@@ -40,7 +44,7 @@ async function openFifos(onError) {
       read.once(event, cb)
     },
     write: function (data, cb) {
-      write.write(data, cb)
+      pack.write(data, cb)
     }
   }
 }
@@ -68,13 +72,13 @@ function wrapErrors(child, onError) {
 // rust/src/bin/vsock.rs
 function openVSock(cid, onError) {
   const stdio = ['pipe', 'pipe', 'pipe']
-  const child = spawn('/bin/vsock', [cid], { stdio, env: { }})
+  const child = spawn('/bin/vsock', [cid], { stdio, env: {} })
   return wrapPid(child).then((child) => {
-    child.stderr.setEncoding('utf8')
-    child.stdout.setEncoding('utf8')
-    child.stderr.pipe(child.stdout)
-    const read = child.stdout.pipe(split())
     child = wrapErrors(child, onError)
+    const unpack = new UnpackrStream()
+    const read = child.stdout.pipe(unpack)
+    const write = new PackrStream()
+    write.pipe(child.stdin)
     return {
       on: function (event, cb) {
         read.on(event, cb)
@@ -83,7 +87,7 @@ function openVSock(cid, onError) {
         read.once(event, cb)
       },
       write: function (data, cb) {
-        child.stdin.write(data, cb)
+        write.write(data, cb)
       }
     }
   })

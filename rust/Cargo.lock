@@ -475,7 +475,7 @@ dependencies = [
 
 [[package]]
 name = "lockhost-runtime"
-version = "0.1.0"
+version = "0.9.1"
 dependencies = [
  "aws-nitro-enclaves-cose",
  "aws-nitro-enclaves-nsm-api",

@@ -1,4 +1,5 @@
 use tokio;
+use std::fs;
 use serde_bytes::ByteBuf;
 use aws_nitro_enclaves_nsm_api::api::{Request, Response};
 use aws_nitro_enclaves_nsm_api::driver::{nsm_init, nsm_process_request};
@@ -54,8 +55,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let public_key = unwrap_or_empty(public_key);
         let nonce = unwrap_or_empty(nonce);
         let user_data = unwrap_or_empty(user_data);
-        let pcr = "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
-        let doc = format!("testdoc,{},{},{},{},{},{}", public_key, nonce, user_data, pcr, pcr, pcr);
+        let pcr_0 = fs::read_to_string("/hash.txt")?;
+        let zeros = "0000000000000000000000000000000000000000000000000000000000000000";
+        let doc = format!("testdoc,{},{},{},{},{},{}", public_key, nonce, user_data, pcr_0, zeros, zeros);
         let doc = base64::encode(doc);
         println!("{}", doc);
         return Ok(())

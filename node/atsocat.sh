@@ -1,5 +1,5 @@
 #!/bin/sh
 set -e
 
-# start
-node /runtime/attest-socat.js "$@"
+## similar to linux socat cmd
+node /runtime/atsocat.js "$@"

@@ -19,23 +19,27 @@ function onError(err) {
 
 const noop = () => {}
 
-function timeout(ms) {
+// use less timers by group 100ms
+const timeout = (ms) => {
   let timer = null
   const timedout = new Promise((res, rej) => {
-    timer = setTimeout(() => rej(null), ms)
+    const now = Date.now()
+    let next = now + ms
+    next = next - (next % 100)
+    next = (100 + next) - now
+    timer = setTimeout(rej, next, null)
   })
   return [timer, timedout]
 }
 
-// write to vsock or tcp socket
-function write(sock, data) {
-  const isNet = sock instanceof net.Socket
+function write(stream, data) {
+  const isNet = stream instanceof net.Socket
   const timeoutMs = isNet ? netTimeout : vsockTimeout
   const name = isNet ? 'net' : 'vsock'
   const [timer, timedout] = timeout(timeoutMs)
   const write = new Promise((res, rej) => {
     timedout.catch((err) => rej(new Error(`${name} write timeout`)))
-    sock.write(data, (err) => {
+    stream.write(data, (err) => {
       if (err) { return rej(err) }
       res()
     })
@@ -44,15 +48,29 @@ function write(sock, data) {
   return write
 }
 
+function end(stream) {
+  const isNet = stream instanceof net.Socket
+  const timeoutMs = isNet ? netTimeout : vsockTimeout
+  const [timer, timedout] = timeout(timeoutMs)
+  const end = () => {
+    clearTimeout(timer)
+    stream.destroy()
+  }
+  timedout.catch(end)
+  stream.once('error', end)
+  stream.once('close', end)
+  stream.end()
+}
+
 function connectToRemoteTcp(ip, port) {
   const info = `${ip} ${port} tcp`
   const conn = new net.Socket()
   const [timer, timedout] = timeout(netTimeout)
   const connect = new Promise((res, rej) => {
+    timedout.catch((err) => rej(new Error(`connect ${info} timeout`)))
     conn.on('error', (err) => rej(new Error(`connect ${info} error ${err.message}`)))
     conn.on('connectionAttemptFailed', () => rej(new Error(`connect ${info} failed`)))
     conn.on('connectionAttemptTimeout', () => rej(new Error(`connect ${info} timeout`)))
-    timedout.catch((err) => rej(new Error(`connect ${info} timeout`)))
     conn.on('close', () => rej(new Error(`connect ${info} close`)))
     conn.connect(port, ip, () => res(conn))
   }).catch((err) => {
@@ -65,21 +83,9 @@ function connectToRemoteTcp(ip, port) {
 
 const connections = {}
 
-async function parseOrError(line) {
-  if (!line) { return }
-  try {
-    return JSON.parse(line)
-  } catch (err) {
-    onError(new Error(`error vsock parse ${line}`))
-  }
-}
-
-// lines arrive from runtime
-async function onVSockData(line) {
-  const json = await parseOrError(line)
-  if (!json) { return }
-
-  let { id, ip, port, data } = json
+// obj arrive from runtime
+async function onVSockData(obj) {
+  let { id, ip, port, data } = obj
   if (!connections[id] && (!ip || !port)) { return }
 
   // new out connection
@@ -94,25 +100,22 @@ async function onVSockData(line) {
         if (!connections[id]) { return }
         delete connections[id]
         log('out server closed connection', id, ip, port)
-        data = Buffer.from(JSON.stringify({ id }) + "\n")
-        write(vsock, data).catch((err) => onError(new Error(`write to vsock failed ${err.message}`)))
-        server.destroySoon()
+        write(vsock, { id }).catch((err) => onError(new Error(`write to vsock failed ${err.message}`)))
+        end(server)
       }
 
       server.on('error', cleanup)
       server.on('close', cleanup)
 
       // fwd data to runtime to enclave
-      server.on('data', (recv) => {
-        recv = recv.toString('base64')
-        data = Buffer.from(JSON.stringify({ id, data: recv }) + "\n")
+      server.on('data', (data) => {
+        data = { id, data }
         write(vsock, data).catch((err) => onError(new Error(`write to vsock failed ${err.message}`)))
       })
     }).catch((err) => {
       delete connections[id]
       log('out server connection failed', id, ip, port, err)
-      const data = Buffer.from(JSON.stringify({ id }) + "\n")
-      write(vsock, data).catch((err) => onError(new Error(`write to vsock failed ${err.message}`)))
+      write(vsock, { id }).catch((err) => onError(new Error(`write to vsock failed ${err.message}`)))
     })
     return
   }
@@ -128,18 +131,16 @@ async function onVSockData(line) {
     if (!data) {
       delete connections[id]
       log('runtime closed inbound enclave connection', id, ip, port)
-      client.destroySoon()
+      end(client)
       return
     }
 
     // fwd data to remote client
-    data = Buffer.from(data, 'base64')
     write(client, data).catch((err) => {
       delete connections[id]
       log('write to remote client connection failed', id, ip, port, err)
-      data = Buffer.from(JSON.stringify({ id }) + "\n")
-      write(vsock, data).catch((err) => onError(new Error(`write to vsock failed ${err.message}`)))
-      client.destroySoon()
+      write(vsock, { id }).catch((err) => onError(new Error(`write to vsock failed ${err.message}`)))
+      end(client)
     })
     return
   }
@@ -158,18 +159,16 @@ async function onVSockData(line) {
   if (!data) {
     delete connections[id]
     log('runtime closed outbound server connection', id, ip, port)
-    server.destroySoon()
+    end(server)
     return
   }
 
   // fwd data to out server
-  data = Buffer.from(data, 'base64')
   write(server, data).catch((err) => {
     delete connections[id]
     log('write to out server failed', id, ip, port, err)
-    data = Buffer.from(JSON.stringify({ id }) + "\n")
-    write(vsock, data).catch((err) => onError(new Error(`write to vsock failed ${err.message}`)))
-    server.destroySoon()
+    write(vsock, { id }).catch((err) => onError(new Error(`write to vsock failed ${err.message}`)))
+    end(server)
   })
 }
 
@@ -180,7 +179,7 @@ async function accept(client, port) {
   log('new in server request', id, ip, port)
 
   // cause runtime to open connection to localhost:port
-  let data = Buffer.from(JSON.stringify({ id, port }) + "\n")
+  let data = { id, port }
   await write(vsock, data).catch((err) => onError(new Error(`write to vsock failed ${err.message}`)))
   connections[id] = { ip, port, client }
 
@@ -188,18 +187,16 @@ async function accept(client, port) {
     if (!connections[id]) { return }
     delete connections[id]
     log('remote client closed inbound server connection', id, ip, port)
-    data = Buffer.from(JSON.stringify({ id }) + "\n")
-    write(vsock, data).catch((err) => onError(new Error(`write to vsock failed ${err.message}`)))
-    client.destroySoon()
+    write(vsock, { id }).catch((err) => onError(new Error(`write to vsock failed ${err.message}`)))
+    end(client)
   }
 
   client.on('error', cleanup)
   client.on('close', cleanup)
 
   // fwd data to runtime to enclave
-  client.on('data', (recv) => {
-    recv = recv.toString('base64')
-    data = Buffer.from(JSON.stringify({ id, data: recv }) + "\n")
+  client.on('data', (data) => {
+    data = { id, data }
     write(vsock, data).catch((err) => onError(new Error(`write to vsock failed ${err.message}`)))
   })
 }
@@ -272,7 +269,6 @@ async function getEnv(request, response) {
   response.end(env)
 }
 
-// connections arrive from runtime
 const httpServer = http.createServer(async function (request, response) {
   const path = request.url.split('?')[0]
 
@@ -317,10 +313,10 @@ let vsock = null
 const cid = parseInt(process.env.cid)
 const tcpPorts = process.argv.slice(2).map((a) => parseInt(a))
 
-openVSock(cid, onError).then((sock) => {
+openVSock(cid, onError).then((vs) => {
   log('open')
-  vsock = sock
-  return write(vsock, "host\n").then(() => {
+  vsock = vs
+  return write(vsock, { hello: 1 }).then(() => {
     log('connected to runtime')
     return bootServers(tcpPorts).then(() => {
       vsock.on('data', onVSockData)

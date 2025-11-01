@@ -1,9 +1,14 @@
 const noop = () => {}
 
-function timeout(ms) {
+// use less timers by group 100ms
+const timeout = (ms) => {
   let timer = null
   const timedout = new Promise((res, rej) => {
-    timer = setTimeout(() => rej(null), ms)
+    const now = Date.now()
+    let next = now + ms
+    next = next - (next % 100)
+    next = (100 + next) - now
+    timer = setTimeout(rej, next, null)
   })
   return [timer, timedout]
 }

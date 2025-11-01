@@ -1,18 +1,13 @@
-# alpine 3.18.9
-FROM alpine@sha256:2995c82e8e723d9a5c8585cb8e901d1c50e3c2759031027d3bff577449435157
+# alpine 3.22.2
+FROM alpine@sha256:85f2b723e106c34644cd5851d7e81ee87da98ac54672b29947c052a45d31dc2f
 
 COPY apk/repositories.serve /etc/apk/repositories
 
-# net
+# old iptables (before nftables)
 RUN apk add --no-cache iptables=1.8.9-r2
 
-# install node
-RUN apk add --no-cache \
-  git=2.40.4-r0 \
-  curl=8.12.1-r0 \
-  bash=5.2.15-r5 \
-  build-base=0.5-r3 \
-  python3=3.11.12-r1
+# node (nvm)
+RUN apk add --no-cache git curl bash
 
 # install node
 WORKDIR /root
@@ -24,9 +19,11 @@ ENV PATH="/root/.nvm/versions/node/v20.11.1/bin:$PATH"
 RUN ln -s /root/.nvm/versions/node/v20.11.1/bin/node /bin/node
 RUN rm -rf /root/nvm
 
+# node ffi
+RUN apk add --no-cache build-base python3 libexpat
+
 # deterministic libexpat
-RUN apk add --no-cache libexpat=2.7.0-r0
-RUN cp /usr/lib/libexpat.so.1.10.1 /root/libexpat.so.1.10.1
+RUN cp /usr/lib/libexpat.so.1.11.1 /root/libexpat.so.1.11.1
 
 # js packages
 WORKDIR /runtime
@@ -36,8 +33,8 @@ RUN npm install
 
 # deterministic libexpat
 RUN rm /usr/lib/libexpat*
-RUN mv /root/libexpat.so.1.10.1 /usr/lib/libexpat.so.1.10.1
-RUN ln -s /usr/lib/libexpat.so.1.10.1 /usr/lib/libexpat.so.1
+RUN mv /root/libexpat.so.1.11.1 /usr/lib/libexpat.so.1.11.1
+RUN ln -s /usr/lib/libexpat.so.1.11.1 /usr/lib/libexpat.so.1
 
 # deterministic ffi
 RUN rm node_modules/ffi-napi/build/Makefile
