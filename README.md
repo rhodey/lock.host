@@ -1,5 +1,5 @@
 # Lock.host (soon)
-Write DApps & Smart Contracts in Rust and JS and use SQLite at $6/mo per GB stored. And all is encrypted.
+Write AI Agents & Smart Contracts in Rust and JS and use SQLite at $6/mo per GB stored. And all is encrypted.
 
 Lock.host is the only place where you will get also outbound HTTPS requests.
 + ~~[lock.host-wasm-rust](https://github.com/rhodey/lock.host-wasm-rust)~~ (soon)
