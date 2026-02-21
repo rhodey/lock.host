@@ -37,17 +37,25 @@ function writeStream(stream, data) {
   return write
 }
 
-function endStream(stream) {
-  const [timer, timedout] = timeout(netTimeout)
+function endStream(stream, delay=netTimeout) {
+  if (stream.destroyed) { return }
+  const [timer, timedout] = timeout(delay)
   const end = () => {
     clearTimeout(timer)
     stream.destroy()
+    stream.removeListener('error', end)
+    stream.removeListener('close', end)
   }
   timedout.catch(end)
   stream.once('error', end)
+  if (stream.closed) { return }
   stream.once('close', end)
-  if (typeof stream.end === 'function') { return stream.end() }
-  stream.close()
+  try {
+    if (typeof stream.end === 'function') { return stream.end() }
+    stream.close()
+  } catch (err) {
+    stream.destroy()
+  }
 }
 
 const wellKnown = '/.well-known/lockhost'
@@ -79,7 +87,7 @@ function sendHello(url, nonce, envelope='tcp') {
     }
 
     conn.on('error', onErr)
-    conn.on('close', () => onErr(new Error('hello = close')))
+    conn.once('close', () => onErr(new Error('hello = close')))
     req = conn.request({ ':path': `${path}/hello?${params.toString()}` })
     req.on('error', onErr)
 
@@ -99,7 +107,7 @@ function sendHello(url, nonce, envelope='tcp') {
     req.on('end', () => {
       if (status !== 200) {
         res({ status })
-        conn.close()
+        endStream(conn)
         return
       }
       body = Buffer.concat(body).toString('utf8')
@@ -109,7 +117,7 @@ function sendHello(url, nonce, envelope='tcp') {
       } catch (err) {
         rej(new Error('hello = reply not json'))
       }
-      conn.close()
+      endStream(conn)
     })
 
     req.end()
@@ -167,7 +175,7 @@ async function connect(url, testFn) {
     }
 
     conn.on('error', onErr)
-    conn.on('close', () => onErr(new Error('session = close')))
+    conn.once('close', () => onErr(new Error('session = close')))
     req = conn.request({ ':method': 'POST', ':path': `${path}/session`, 'cookie': `sessionlh=${cookie}` })
     req.on('error', onErr)
 
@@ -192,9 +200,9 @@ async function connect(url, testFn) {
         endStream(conn)
       }
 
-      encrypt.on('close', close)
-      decrypt.on('close', close)
-      conn.on('close', close)
+      encrypt.once('close', close)
+      decrypt.once('close', close)
+      conn.once('close', close)
 
       encrypt.pipe(req)
       req.pipe(decrypt)
@@ -232,10 +240,10 @@ async function client(url, testFn, log, userData=null) {
       pack.on('error', close)
       unpack.on('error', close)
 
-      encrypt.on('close', close)
-      decrypt.on('close', close)
-      pack.on('close', close)
-      unpack.on('close', close)
+      encrypt.once('close', close)
+      decrypt.once('close', close)
+      pack.once('close', close)
+      unpack.once('close', close)
 
       // client is inside Nitro Enclave
       const attestEnclave = (nonce) => {
@@ -270,7 +278,7 @@ async function client(url, testFn, log, userData=null) {
 }
 
 module.exports = {
-  urlToHostAndPath,
+  timeout, urlToHostAndPath,
   writeStream, endStream,
   sendHello, startState,
   connect, client,
