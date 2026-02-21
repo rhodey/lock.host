@@ -5,6 +5,7 @@ const crypto = require('crypto')
 const spawn = require('child_process').spawn
 const exec = require('child_process').exec
 const dnsServer = require('./dns.js')
+const { timeout, endStream } = require('/runtime/attest-duplex.js')
 const attestServer = require('./attest-server.js')
 const getsockopt = require('./sockopt.js')
 const openVSock = require('./vsock.js')
@@ -12,11 +13,9 @@ const fetch = require('./fetch.js')
 
 const netTimeout = 5_000
 const vsockTimeout = 5_000
-const isTest = process.env.PROD !== 'true'
 const uuid = () => crypto.randomBytes(8).toString('hex')
 
 // todo: heartbeats
-// todo: delay before exit for logs
 
 function sendLog(from, msg) {
   const host = 'http://127.0.0.1:9000'
@@ -25,6 +24,7 @@ function sendLog(from, msg) {
   return fetch(request, netTimeout)
 }
 
+let count = 0
 let booted = false
 function log(...args) {
   let from = 'runtime.js'
@@ -32,32 +32,21 @@ function log(...args) {
     from = 'app'
     args = args.slice(1)
   }
+  args = [count++, ...args]
   console.log.apply(null, [`${from} -`, ...args])
   if (!booted) { return }
   const msg = util.format.apply(null, args)
   sendLog(from, msg)
-    .catch((err) => onError(new Error(`log failed with error ${err.message}`)))
+    .catch((err) => console.log(`log failed with error ${err.message}`))
 }
 
 function onError(err) {
   log('error', err)
-  process.exit(1)
+  // give logs time to send
+  setTimeout(() => process.exit(1), 2_500)
 }
 
 const noop = () => {}
-
-// use less timers by group 100ms
-const timeout = (ms) => {
-  let timer = null
-  const timedout = new Promise((res, rej) => {
-    const now = Date.now()
-    let next = now + ms
-    next = next - (next % 100)
-    next = (100 + next) - now
-    timer = setTimeout(rej, next, null)
-  })
-  return [timer, timedout]
-}
 
 function write(stream, data) {
   const isNet = stream instanceof net.Socket
@@ -77,16 +66,8 @@ function write(stream, data) {
 
 function end(stream) {
   const isNet = stream instanceof net.Socket
-  const timeoutMs = isNet ? netTimeout : vsockTimeout
-  const [timer, timedout] = timeout(timeoutMs)
-  const end = () => {
-    clearTimeout(timer)
-    stream.destroy()
-  }
-  timedout.catch(end)
-  stream.once('error', end)
-  stream.once('close', end)
-  stream.end()
+  const delayMs = isNet ? netTimeout : vsockTimeout
+  endStream(stream, delayMs)
 }
 
 function connectToLocalTcp(port) {
@@ -96,9 +77,9 @@ function connectToLocalTcp(port) {
   const connect = new Promise((res, rej) => {
     timedout.catch((err) => rej(new Error(`connect ${info} timeout`)))
     conn.on('error', (err) => rej(new Error(`connect ${info} error ${err.message}`)))
-    conn.on('connectionAttemptFailed', () => rej(new Error(`connect ${info} failed`)))
-    conn.on('connectionAttemptTimeout', () => rej(new Error(`connect ${info} timeout`)))
-    conn.on('close', () => rej(new Error(`connect ${info} close`)))
+    conn.once('connectionAttemptFailed', () => rej(new Error(`connect ${info} failed`)))
+    conn.once('connectionAttemptTimeout', () => rej(new Error(`connect ${info} timeout`)))
+    conn.once('close', () => rej(new Error(`connect ${info} close`)))
     conn.connect(port, '127.0.0.1', () => res(conn))
   }).catch((err) => {
     conn.destroy()
@@ -134,7 +115,7 @@ async function onVSockData(obj) {
       }
 
       server.on('error', cleanup)
-      server.on('close', cleanup)
+      server.once('close', cleanup)
 
       // fwd data to host to fwd to client outside
       server.on('data', (data) => {
@@ -230,7 +211,7 @@ const tcpServer = net.createServer(async (client) => {
   }
 
   client.on('error', cleanup)
-  client.on('close', cleanup)
+  client.once('close', cleanup)
 
   // fwd data to host to fwd to out server
   client.on('data', (data) => {
@@ -240,11 +221,11 @@ const tcpServer = net.createServer(async (client) => {
 })
 
 tcpServer.on('error', (err) => onError(new Error(`tcpServer error ${err.message}`)))
-tcpServer.on('close', () => onError(new Error('tcpServer closed')))
+tcpServer.once('close', () => onError(new Error('tcpServer closed')))
 
 function wrapPid(child) {
   return new Promise((res, rej) => {
-    child.once('error', rej)
+    child.on('error', rej)
     if (child.pid) { res(child) }
     rej(new Error('no child pid'))
   })
@@ -252,7 +233,7 @@ function wrapPid(child) {
 
 // exit on app exit
 function wrapErrors(child) {
-  child.on('exit', (code) => onError(new Error(`app exit ${code}`)))
+  child.once('exit', (code) => onError(new Error(`app exit ${code}`)))
   child.on('error', (err) => onError(new Error(`app error ${err.message}`)))
   child.stderr.on('error', (err) => onError(new Error(`app stderr error ${err.message}`)))
   child.stdout.on('error', (err) => onError(new Error(`app stdout error ${err.message}`)))

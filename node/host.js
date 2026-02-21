@@ -2,6 +2,7 @@ const net = require('net')
 const http = require('http')
 const crypto = require('crypto')
 const openVSock = require('./vsock.js')
+const { timeout, endStream } = require('/runtime/attest-duplex.js')
 
 const netTimeout = 10_000
 const vsockTimeout = 5_000
@@ -18,19 +19,6 @@ function onError(err) {
 }
 
 const noop = () => {}
-
-// use less timers by group 100ms
-const timeout = (ms) => {
-  let timer = null
-  const timedout = new Promise((res, rej) => {
-    const now = Date.now()
-    let next = now + ms
-    next = next - (next % 100)
-    next = (100 + next) - now
-    timer = setTimeout(rej, next, null)
-  })
-  return [timer, timedout]
-}
 
 function write(stream, data) {
   const isNet = stream instanceof net.Socket
@@ -50,16 +38,8 @@ function write(stream, data) {
 
 function end(stream) {
   const isNet = stream instanceof net.Socket
-  const timeoutMs = isNet ? netTimeout : vsockTimeout
-  const [timer, timedout] = timeout(timeoutMs)
-  const end = () => {
-    clearTimeout(timer)
-    stream.destroy()
-  }
-  timedout.catch(end)
-  stream.once('error', end)
-  stream.once('close', end)
-  stream.end()
+  const delayMs = isNet ? netTimeout : vsockTimeout
+  endStream(stream, delayMs)
 }
 
 function connectToRemoteTcp(ip, port) {
@@ -69,9 +49,9 @@ function connectToRemoteTcp(ip, port) {
   const connect = new Promise((res, rej) => {
     timedout.catch((err) => rej(new Error(`connect ${info} timeout`)))
     conn.on('error', (err) => rej(new Error(`connect ${info} error ${err.message}`)))
-    conn.on('connectionAttemptFailed', () => rej(new Error(`connect ${info} failed`)))
-    conn.on('connectionAttemptTimeout', () => rej(new Error(`connect ${info} timeout`)))
-    conn.on('close', () => rej(new Error(`connect ${info} close`)))
+    conn.once('connectionAttemptFailed', () => rej(new Error(`connect ${info} failed`)))
+    conn.once('connectionAttemptTimeout', () => rej(new Error(`connect ${info} timeout`)))
+    conn.once('close', () => rej(new Error(`connect ${info} close`)))
     conn.connect(port, ip, () => res(conn))
   }).catch((err) => {
     conn.destroy()
@@ -105,7 +85,7 @@ async function onVSockData(obj) {
       }
 
       server.on('error', cleanup)
-      server.on('close', cleanup)
+      server.once('close', cleanup)
 
       // fwd data to runtime to enclave
       server.on('data', (data) => {
@@ -192,7 +172,7 @@ async function accept(client, port) {
   }
 
   client.on('error', cleanup)
-  client.on('close', cleanup)
+  client.once('close', cleanup)
 
   // fwd data to runtime to enclave
   client.on('data', (data) => {
@@ -208,7 +188,7 @@ function tcpServer(port) {
   const tcpServer = net.createServer(wrap)
   return new Promise((res, rej) => {
     tcpServer.on('error', (err) => onError(new Error(`tcpServer ${port} error ${err.message}`)))
-    tcpServer.on('close', () => onError(new Error(`tcpServer ${port} closed`)))
+    tcpServer.once('close', () => onError(new Error(`tcpServer ${port} closed`)))
     tcpServer.listen(port, '0.0.0.0', res)
   })
 }
@@ -237,7 +217,7 @@ function readBody(request) {
     request.setEncoding('utf8')
     request.on('error', rej)
     request.on('data', (chunk) => str += chunk)
-    request.on('end', () => res(str))
+    request.once('end', () => res(str))
   })
   read.catch(noop).finally(() => clearTimeout(timer))
   return read

@@ -1,19 +1,7 @@
+const { timeout } = require('/runtime/attest-duplex.js')
 const noop = () => {}
 
-// use less timers by group 100ms
-const timeout = (ms) => {
-  let timer = null
-  const timedout = new Promise((res, rej) => {
-    const now = Date.now()
-    let next = now + ms
-    next = next - (next % 100)
-    next = (100 + next) - now
-    timer = setTimeout(rej, next, null)
-  })
-  return [timer, timedout]
-}
-
-// simple wrapper for timeouts
+// simple wrapper with timeouts
 module.exports = function fetchWithTimeout(request, timeoutms=10_000) {
   if (typeof request === 'string') { request = new Request(request) }
   if (!(request instanceof Request)) { return Promise.reject(new Error('fetch accepts url or instance of Request')) }
