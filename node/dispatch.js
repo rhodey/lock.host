@@ -28,7 +28,7 @@ class FetchHelper extends Dispatcher {
       }
 
       conn.on('error', onErr)
-      conn.on('close', () => onErr(new Error('session = close')))
+      conn.once('close', () => onErr(new Error('session = close')))
       req = conn.request({ ':method': 'POST', ':path': `${path}/session`, 'cookie': `sessionlh=${cookie}` })
       req.on('error', onErr)
 
@@ -37,7 +37,7 @@ class FetchHelper extends Dispatcher {
       let body = []
       req.on('data', (data) => body.push(data))
 
-      req.on('end', () => {
+      req.once('end', () => {
         if (status !== 200) {
           rej(new Error(`session = status ${status}`))
           conn.close()

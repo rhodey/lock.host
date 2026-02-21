@@ -7,7 +7,7 @@ const { createCA, createCert } = require('mkcert')
 const cookie = require('cookie')
 const attest = require('./attest.js')
 const ttlCache = require('./cache.js')
-const { endStream } = require('./attest-duplex.js')
+const { timeout, endStream } = require('./attest-duplex.js')
 const { EncryptStream, DecryptStream } = require('./streams.js')
 
 const netTimeout = 5 * 1000
@@ -17,41 +17,22 @@ const cookieSeconds = 365 * 24 * 60 * 1000
 const noop = () => {}
 const uuid = () => crypto.randomUUID()
 
-// use less timers by group 100ms
-const timeout = (ms) => {
-  let timer = null
-  const timedout = new Promise((res, rej) => {
-    const now = Date.now()
-    let next = now + ms
-    next = next - (next % 100)
-    next = (100 + next) - now
-    timer = setTimeout(rej, next, null)
-  })
-  return [timer, timedout]
-}
-
 function writeHead(stream, stat, headers={}) {
   headers['access-control-max-age'] = 9999999
   headers['access-control-allow-origin'] = '*'
   headers['access-control-allow-methods'] = 'OPTIONS, POST, GET'
   headers['content-type'] = stat !== 200 ? 'text/plain' : 'application/json'
-  try {
-    stream.respond({ ':status': stat, ...headers })
-  } catch (err) { }
+  stream.respond({ ':status': stat, ...headers })
 }
 
 function on500(stream) {
   writeHead(stream, 500)
-  try {
-    stream.end('500')
-  } catch (err) { }
+  stream.end('500')
 }
 
 function on400(stream) {
   writeHead(stream, 400)
-  try {
-    stream.end('400')
-  } catch (err) { }
+  stream.end('400')
 }
 
 function paramsOfPath(path) {
@@ -98,7 +79,7 @@ function readBody(stream) {
     stream.setEncoding('utf8')
     stream.on('error', rej)
     stream.on('data', (chunk) => body += chunk)
-    stream.on('end', () => res(body))
+    stream.once('end', () => res(body))
   })
   read.catch(noop).finally(() => clearTimeout(timer))
   return read
@@ -178,9 +159,9 @@ function connectToTcp(port) {
   const connect = new Promise((res, rej) => {
     timedout.catch((err) => rej(new Error(`connect to ${info} timeout`)))
     conn.on('error', (err) => rej(new Error(`connect to ${info} error ${err.message}`)))
-    conn.on('connectionAttemptFailed', () => rej(new Error(`connect ${info} failed`)))
-    conn.on('connectionAttemptTimeout', () => rej(new Error(`connect to ${info} timeout`)))
-    conn.on('close', () => rej(new Error(`connect to ${info} close`)))
+    conn.once('connectionAttemptFailed', () => rej(new Error(`connect ${info} failed`)))
+    conn.once('connectionAttemptTimeout', () => rej(new Error(`connect to ${info} timeout`)))
+    conn.once('close', () => rej(new Error(`connect to ${info} close`)))
     conn.connect(port, '127.0.0.1', () => res(conn))
   }).catch((err) => {
     conn.destroy()
@@ -214,8 +195,8 @@ async function onTcpEnvelope(keys, client, target, alive) {
 
   server.on('error', cleanup)
   client.on('error', cleanup)
-  server.on('close', cleanup)
-  client.on('close', cleanup)
+  server.once('close', cleanup)
+  client.once('close', cleanup)
 
   const encrypt = new EncryptStream(keys.sharedTx)
   const decrypt = new DecryptStream(keys.sharedRx)
@@ -321,11 +302,13 @@ module.exports = async function attestServer(port, onError, log) {
 
     } catch(err) {
       log('http2 server 500', path, err)
-      on500(stream)
+      try {
+        on500(stream)
+      } catch (err) { }
     }
   })
 
-  server.once('error', () => onError(new Error('http2 server error')))
+  server.on('error', () => onError(new Error('http2 server error')))
   server.once('close', () => onError(new Error('http2 server close')))
 
   return new Promise((res, rej) => {
