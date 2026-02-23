@@ -3,7 +3,7 @@ Write AI Agents & Smart Contracts in Rust and JS and use SQLite at $6/mo per GB 
 
 Lock.host is the only place where you will get also outbound HTTPS requests.
 + ~~[lock.host-wasm-rust](https://github.com/rhodey/lock.host-wasm-rust)~~ (soon)
-+ ~~[lock.host-wasm-js](https://github.com/rhodey/lock.host-wasm-js)~~ (soon)
++ [lock.host-wasm-js](https://github.com/rhodey/lock.host-wasm-js)
 + [lock.host-keys](https://github.com/rhodey/lock.host-keys)
 + [IPFS-boot](https://github.com/rhodey/IPFS-boot)
 
