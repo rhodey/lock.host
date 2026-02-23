@@ -23,7 +23,7 @@ All of the above have merit. All of the above require extra compute (lots). And 
 If you want to code [WASM](https://en.wikipedia.org/wiki/WebAssembly) apps using Rust or JS: use the links above. If you want to self-host Nitro apps with the Lock.host stack: start by installing docker using common docs then install [just](https://github.com/casey/just):
 ```
 apt install just
-brew install just
+(or brew install just)
 ```
 
 ## Build images
